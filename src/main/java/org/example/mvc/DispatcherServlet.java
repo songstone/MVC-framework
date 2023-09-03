@@ -3,6 +3,7 @@ package org.example.mvc;
 import org.example.mvc.controller.Controller;
 import org.example.mvc.controller.RequestMethod;
 import org.example.mvc.view.JspViewResolver;
+import org.example.mvc.view.ModelAndView;
 import org.example.mvc.view.View;
 import org.example.mvc.view.ViewResolver;
 import org.slf4j.Logger;
@@ -24,6 +25,8 @@ public class DispatcherServlet extends HttpServlet {
 
     private RequestMappingHandler requestMappingHandler;
 
+    private List<HandlerAdapter> handlerAdapters;
+
     private List<ViewResolver> viewResolvers;
 
     @Override
@@ -31,6 +34,7 @@ public class DispatcherServlet extends HttpServlet {
         requestMappingHandler = new RequestMappingHandler();
         requestMappingHandler.init();
 
+        handlerAdapters = List.of(new SimpleControllerHandlerAdapter());
         viewResolvers = Collections.singletonList(new JspViewResolver());
     }
 
@@ -42,12 +46,19 @@ public class DispatcherServlet extends HttpServlet {
             Controller handler = requestMappingHandler.findHandler(new HandlerKey(RequestMethod.valueOf(request.getMethod()), request.getRequestURI()));
             String viewName = handler.handleRequest(request, response);
 
+            HandlerAdapter handlerAdapter = handlerAdapters.stream()
+                .filter(ha -> ha.supports(handler))
+                .findAny()
+                .orElseThrow(() -> new ServletException("no adapter [" + handler + "]"));
+
+            ModelAndView modelAndView = handlerAdapter.handle(request, response, handler);
+
             for (ViewResolver viewResolver : viewResolvers) {
-                View view = viewResolver.resolveView(viewName);
-                view.render(request.getParameterMap(), request, response);
+                View view = viewResolver.resolveView(modelAndView.getViewName());
+                view.render(modelAndView.getModel(), request, response);
             }
         } catch (Exception e) {
-            log.error("exception occured: [{}]", e.getMessage() ,e);
+            log.error("exception occured: [{}]", e.getMessage(), e);
             throw new ServletException(e);
         }
 
